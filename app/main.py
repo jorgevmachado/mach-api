@@ -4,12 +4,18 @@ from fastapi import FastAPI
 from fastapi_pagination import add_pagination
 
 from app.core.logging import configure_logging
+from app.domain.auth.route import router as auth_router
+from app.domain.trainer.route import router as trainer_router
 from app.shared.schemas import Message
 
 configure_logging()
 app = FastAPI()
 
 add_pagination(app)
+
+app.include_router(auth_router, prefix='/auth', tags=['Auth'])
+app.include_router(trainer_router, prefix='/trainers', tags=['Trainers'])
+
 
 @app.get('/', status_code=HTTPStatus.OK, response_model=Message)
 def read_root():

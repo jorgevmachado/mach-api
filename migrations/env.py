@@ -9,6 +9,10 @@ from alembic import context
 from app.core.database import table_registry
 from app.core.settings import Settings
 
+# Import models so Alembic can see them in table_registry.metadata
+import app.models.user  # noqa: F401
+import app.models.trainer  # noqa: F401
+
 config = context.config
 config.set_main_option('sqlalchemy.url', Settings().DATABASE_URL)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from http import HTTPStatus
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, HTTPException
@@ -13,23 +14,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.settings import Settings
-from app.models.trainer import Trainer
+from app.models.user import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/token', refreshUrl='auth/refresh')
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', refreshUrl='auth/refresh')
 
 settings = Settings()
 pwd_context = PasswordHash.recommended()
 
 
-def get_password_hash(password: str):
+def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str):
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(data: dict):
+def create_access_token(data: dict) -> str:
     to_encode = data.copy()
 
     expire = datetime.now(tz=ZoneInfo('UTC')) + timedelta(
@@ -44,7 +45,7 @@ def create_access_token(data: dict):
 async def get_current_user(
     session: AsyncSession = Depends(get_session),
     token: str = Depends(oauth2_scheme),
-) -> Trainer:
+) -> User:
     credentials_exception = HTTPException(
         status_code=HTTPStatus.UNAUTHORIZED,
         detail='Could not validate credentials',
@@ -53,18 +54,17 @@ async def get_current_user(
 
     try:
         payload = decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        subject_email = payload.get('sub')
+        subject: str | None = payload.get('sub')
 
-        if not subject_email:
+        if not subject:
             raise credentials_exception
 
-    except DecodeError:
+        user_id = UUID(subject)
+
+    except (DecodeError, ExpiredSignatureError, ValueError):
         raise credentials_exception
 
-    except ExpiredSignatureError:
-        raise credentials_exception
-
-    user = await session.scalar(select(Trainer).where(Trainer.email == subject_email))
+    user = await session.scalar(select(User).where(User.id == user_id))
 
     if not user:
         raise credentials_exception
