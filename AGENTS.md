@@ -1,170 +1,120 @@
 # mach-api
-RESTful API, built with FastAPI and async SQLAlchemy.
 
-O projeto foi construído com FastAPI, SQLAlchemy async e arquitetura por domínio, mantendo responsabilidades claras entre rotas, serviços, repositórios e schemas.
+## Package Identity
+RESTful API built with Python 3.13, FastAPI (async), SQLAlchemy async, Pydantic v2,
+Alembic migrations, Redis cache, and PostgreSQL. Domain-driven layered architecture.
 
+## Setup & Run
 ```bash
-    make install  # Instalação de todas as dependência.
-    make format  # Formatação do código (Executa o lint-fix e o lint-format).
-    make test # Executa os testes (executa o format o test-app e o test-coverage).
-    make dev # Executa o servidor de desenvolvimento.
-    make create-migration # Cria uma nova migração para o banco de dados.
-    make migrate # Executa as migrações pendentes no banco de dados.
-    make test-file # Executa os testes de um arquivo especifico.
+poetry install            # install all dependencies
+make dev                  # start dev server (fastapi dev app/main.py)
+make test                 # lint + pytest + coverage report
+make lint                 # ruff check only
+make format               # ruff fix + format
+make create-migration message="describe change"  # autogenerate Alembic migration
+make migrate              # apply pending migrations (alembic upgrade head)
+make test-file file=tests/app/domain/<domain>/test_service.py  # single file
 ```
 
----
+## Architecture: 5-Layer Stack
+```
+route.py  →  service.py  →  repository.py  →  models.py
+                ↘ business.py (pure domain rules)
+                ↘ schema.py   (Pydantic DTOs)
+```
+- Entry point: `app/main.py`
+- Domain code: `app/domain/<domain>/`
+- Shared infrastructure: `app/core/` (cache, db, security, logging, pagination)
+- Shared schemas/utils: `app/shared/`
+- DB models (cross-domain): `app/models/`
+- Tests mirror source: `tests/app/domain/<domain>/`, `tests/app/core/<module>/`
 
-## 1) Arquitetura
+## Patterns & Conventions
 
-1. `app/main.py`: Ponto de entrada da aplicação, onde o FastAPI é instanciado, middlewares são configurados e os routers de cada domínio são incluídos.
-2. `app/core/**`: Contém módulos de infraestrutura e utilitários compartilhados, como segurança, cache e logging.
-3. `app/domain/**`: Cada subdiretório representa um domínio de negócio, contendo suas próprias rotas, serviços, repositórios, modelos e esquemas.
-   1. `app/domain/<dominio>/route.py`: Definição dos endpoints HTTP para cada domínio, utilizando FastAPI e delegando a lógica para os serviços.
-   2. `app/domain/<dominio>/schema.py`: Definição dos contratos de dados específicos para cada domínio, incluindo validação e serialização.
-   3. `app/domain/<dominio>/services.py`: Implementação da lógica de negócio e orquestração das operações para cada domínio, incluindo cache e tratamento de erros. 
-   4. `app/domain/<dominio>/repository.py`: Camada de acesso aos dados, abstração das operações CRUD para cada entidade, utilizando SQLAlchemy async.
-   5. `app/domain/<dominio>/business.py`: Implementação das regras de negócio específicas para cada domínio, incluindo validação de regras de negócio e tratamento de exceções.
-   6. `app/domain/<dominio>/models.py`: Definição dos modelos de dados para cada domínio, utilizando SQLAlchemy ORM. 
-4. `app/models/**`: Definição dos modelos de dados compartilhados entre domínios, incluindo entidades e relacionamentos.
-5. `app/shared/**`: Contém módulos de infraestrutura e utilitários compartilhados entre domínios, como configurações, validações e utilitários.
-6. `tests/**`: Contém os testes unitários e integração para cada domínio e infraestrutura compartilhada.
- 
----
+**Layer rules (strict)**
+- `route.py` — delegates only; no business logic; explicit `response_model`; auth via `Depends(get_current_user)`
+- `service.py` — orchestrates logic, cache, and errors; use `log_service_success` / `handle_service_exception`
+- `repository.py` — SQLAlchemy queries only; extend `BaseRepository`; no business logic
+- `business.py` — pure rules, calculations; no infra dependencies; highly testable
+- `schema.py` — Pydantic DTOs; input/output contracts; no ORM coupling
 
-## 2) Principios de atuacao
-- Manter separacao de camadas (`route` -> `service` -> `repository` -> `model/schema`).
-- Evitar logica de negocio em router.
-- Preferir reaproveitar `BaseService`, `BaseRepository` e utilitarios de `core`.
-- Garantir tipagem forte (Pydantic + type hints).
-- Tratar erros via `handle_service_exception` e padrao de logging.
-- Cobrir comportamento com testes de unidade/integracao no dominio afetado.
+**DOs**
+- DO: Extend `BaseService` for standard CRUD — see `app/core/service/base.py`
+- DO: Use `list_all_cached` / `find_one_cached` when caching a resource — see `app/core/service/base.py`
+- DO: Use `handle_service_exception` in every service try/except — see `app/core/exceptions/exceptions.py`
+- DO: Use `BaseRepository` for list/find/paginate — see `app/core/repository/base.py`
+- DO: Add `get_current_user` dependency on protected endpoints — see `app/core/security/security.py`
 
----
+**DON'Ts**
+- DON'T: Put business logic in `route.py`
+- DON'T: Query the DB directly in a router
+- DON'T: Duplicate logic already in `BaseService` / `BaseRepository`
+- DON'T: Modify historical Alembic migrations already applied in shared environments
+- DON'T: Introduce external libraries without clear necessity
 
-## 3) Limites
-| Grupo  | Arquivos                                                                                                                                                                         | Observação                                                                               |
-|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------|
-| models | `app/models/**`                                                                                                                                                                  | Cada entidade deve ser independente                                                      |
-| domain | `app/domain/<dominio>/route.py`, `app/domain/<dominio>/schema.py`,  `app/domain/<dominio>/services.py`, `app/domain/<dominio>/repository.py`, `app/domain/<dominio>/business.py` | Cada dominio deve ser independente. Verificar cobertura de testes unitários e integração |
-| shared | `app/shared/**`                                                                                                                                                                  | Verificar integridade e consistencia das utilitarios compartilhados                      |
-| tests  | `tests/**`                                                                                                                                                                       | Verificar cobertura de testes unitários e integração                                     |
+## Key Files
+- App entry: `app/main.py`
+- Settings: `app/core/settings.py`
+- Auth: `app/core/security/security.py` (`get_current_user`, `create_access_token`)
+- Cache: `app/core/cache/service.py` (`CacheService`)
+- Base service: `app/core/service/base.py`
+- Base repo: `app/core/repository/base.py`
+- Shared schemas: `app/shared/schemas.py` (`FilterPage`, `Message`)
+- Error handler: `app/core/exceptions/exceptions.py`
+- Logging helpers: `app/core/logging/logging.py`
 
----
-## 4) Mapa rapido por tipo de tarefa
+## JIT Index Hints
+```bash
+# Find all domain routes
+rg -n "@router\.(get|post|put|delete|patch)" app/domain/
 
-### 4.1 Nova rota em dominio existente
-1. `app/domain/<dominio>/schema.py`: entrada/saida da rota.
-2. `app/domain/<dominio>/service.py`: caso de uso e regras.
-3. `app/domain/<dominio>/repository.py`: consulta/persistencia necessaria.
-4. `app/domain/<dominio>/route.py`: expor endpoint.
-5. `tests/app/domain/<dominio>/test_route.py` e `test_service.py`: validar contrato e regra.
+# Find service methods
+rg -n "async def " app/domain/*/service.py
 
-### 4.2 Nova entidade de banco
-1. Criar/alterar model em `app/models/`.
-2. Ajustar repository/service de dominio dono.
-3. Gerar migracao Alembic (`migrations/versions/*`).
-4. Adicionar testes de repository e service.
+# Find repository queries
+rg -n "async def " app/core/repository/base.py app/domain/*/repository.py
 
-### 4.3 Regra de negocio complexa
-- Preferir `business.py` no dominio.
-- Cobrir com testes especificos de business.
-- Expor somente interface necessaria para service.
+# Find all models
+find app/models -name "*.py" ! -name "__init__.py"
 
-### 4.4 Ajuste em autenticacao
-- `app/core/security/security.py` para token/hash/current user.
-- `app/domain/auth/*` para contrato e fluxo de login/refresh.
-- testes em `tests/app/core/security/` e `tests/app/domain/auth/`.
+# Run tests for one domain
+make test-file file=tests/app/domain/<domain>/test_service.py
+```
 
-### 4.5 Ajuste em cache
-- Cache generico: `app/core/cache/*`.
-- Cache de catalogo pokemon: `app/domain/pokemon/cache.py`.
-- Validar expiracao/chave com `tests/app/core/cache/*` e `tests/app/domain/pokemon/test_cache.py`.
+## Task Playbooks
 
----
+### Add a route to an existing domain
+1. `app/domain/<domain>/schema.py` — define input/output schemas
+2. `app/domain/<domain>/service.py` — implement use case, reuse `BaseService` methods
+3. `app/domain/<domain>/repository.py` — add query if needed
+4. `app/domain/<domain>/route.py` — expose endpoint with `response_model`
+5. `tests/app/domain/<domain>/test_route.py` + `test_service.py` — cover success + error
 
-## 5) Regras de implementacao por camada
-### 5.1 Route (`route.py`)
-- Recebe request/depends e delega para service.
-- Sem regra de negocio densa.
-- `response_model` explicito.
-- Dependencia de autenticacao com `get_current_user` quando endpoint protegido.
+### Add a new DB entity
+1. Create/alter model in `app/models/`
+2. Update repository/service of owning domain
+3. `make create-migration message="add <entity>"` — generate Alembic migration
+4. `make migrate` — apply migration
+5. Add tests for repository and service
 
-### 5.2 Service (`service.py`)
-- Orquestra regra, persistencia e integracoes.
-- Centraliza cache e tratamento de erro de caso de uso.
-- Usa `log_service_success` / `handle_service_exception`.
+### Auth-related change
+- Token/hash/current user: `app/core/security/security.py`
+- Login/refresh flow: `app/domain/auth/*`
+- Tests: `tests/app/core/security/` and `tests/app/domain/auth/`
 
-### 5.3 Repository (`repository.py`)
-- Concentra query SQLAlchemy.
-- Aproveita `BaseRepository` para list/find/paginar.
-- Evita regra de negocio.
+### Cache-related change
+- Generic cache: `app/core/cache/`
+- Domain-specific cache: `app/domain/<domain>/cache.py`
+- Validate key/expiry with tests in `tests/app/core/cache/`
 
-### 5.4 Business (`business.py`)
-- Regras puras, calculos, normalizacao e decisao de dominio.
-- Deve ser altamente testavel sem dependencia de infra.
-
-### 5.5 Schema (`schema.py`)
-- Contratos de API e DTOs de camada.
-- Validacoes de formato/tipos.
-- Evitar acoplamento com session/ORM em schema.
-
----
-
-## 6) Convencoes de teste
-- Local padrao por modulo: `tests/app/domain/<dominio>/` e `tests/app/core/<modulo>/`.
-- Para todo ajuste relevante:
-  - teste de sucesso;
-  - teste de erro/edge case;
-  - teste de regressao (quando bugfix).
-- Em alteracoes de contrato HTTP, atualizar `test_route.py` correspondente.
-- Em alteracoes de query/filtro/paginacao, atualizar `test_repository.py`.
-
----
-
-## 7) Checklist obrigatorio antes de concluir uma tarefa
-- [ ] Alteração foi feita na camada correta.
-- [ ] Não houve quebra de contrato de rota sem atualizar schema/teste/docs.
-- [ ] Erros são tratados via padrão (`handle_service_exception`/HTTPException apropriada).
-- [ ] Logs relevantes foram mantidos/adicionados com contexto.
-- [ ] Testes do módulo alterado foram atualizados e executados.
-- [ ] Lint (`ruff`) está limpo.
-- [ ] Se houve mudanca de banco, migracao foi criada/revisada.
-
----
-
-## 8) Guardrails para agentes (Não fazer)
-- Não mover regra de negocio para `route.py`.
-- Não acessar banco diretamente em router.
-- Não duplicar logica ja existente em `BaseService`/`BaseRepository`.
-- Não introduzir dependencia externa sem necessidade real.
-- Não alterar arquivos de geracao automatica sem justificativa (`htmlcov/`, caches).
-- Não modificar migracoes historicas ja aplicadas em ambientes compartilhados.
-
----
-
-## 9) Playbooks prontos
-### 9.1 Criar endpoint protegido de consulta
-1. Definir schema de filtro/saida em `schema.py`.
-2. Criar metodo em `service.py` com `trainer: CurrentTrainer` quando necessario.
-3. Reaproveitar `list_all_cached`/`find_one_cached` se aplicavel.
-4. Expor rota em `route.py` com dependency de auth.
-5. Cobrir `test_route.py` + `test_service.py`.
-
-### 9.2 Bugfix de performance em listagem
-1. Revisar `BaseRepository.list_all` e filtros aplicados.
-2. Verificar necessidade de cache (`CacheService` / `PokemonCacheService`).
-3. Ajustar pagina/filter/order sem quebrar contratos.
-4. Cobrir com testes de paginacao e filtro.
-
----
-
-## 10) Definicao de pronto (DoD) para tarefas automatizadas
-Uma tarefa esta pronta quando:
-1. implementacao atende requisito funcional;
-2. arquitetura e convencoes locais foram respeitadas;
-3. testes e lint passaram localmente;
-4. documentacao minima (quando aplicavel) foi atualizada;
-5. risco de regressao foi coberto com teste novo ou ajuste de teste existente.
-
----
+## Pre-PR Checklist
+```bash
+make test   # lint + pytest + coverage — must be green
+```
+- [ ] Change made in the correct layer
+- [ ] No HTTP contract broken without updating schema/test/docs
+- [ ] Errors handled via `handle_service_exception` / appropriate `HTTPException`
+- [ ] Relevant logs added with context
+- [ ] Tests for the modified module updated and passing
+- [ ] Ruff (`make lint`) clean
+- [ ] If DB changed, migration created and reviewed
