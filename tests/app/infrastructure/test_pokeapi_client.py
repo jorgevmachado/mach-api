@@ -170,10 +170,9 @@ class TestPokeApiClientMethods:
                 'pp': 15,
                 'type': {'name': 'electric', 'url': '/type/13'},
                 'name': 'thunder-punch',
-                'order': 9,
                 'power': 75,
                 'target': {'name': 'selected-pokemon', 'url': '/target/10'},
-                'effect_entries': [{'flavor_text': 'Hit target', 'language': {'name': 'en', 'url': '/lang/9'}, 'short_effect': 'Hit'}],
+                'effect_entries': [{'effect': 'Hit target', 'language': {'name': 'en', 'url': '/lang/9'}, 'short_effect': 'Hit'}],
                 'damage_class': {'name': 'physical', 'url': '/damage-class/2'},
                 'effect_chance': None,
                 'accuracy': 100,
@@ -216,7 +215,9 @@ class TestPokeApiClientMethods:
 
         assert (await client.get_pokemon('pikachu')).name == 'pikachu'
         assert (await client.get_pokemon_species('25')).growth_rate.name == 'medium-fast'
-        assert (await client.get_move('thunder-punch')).damage_class.name == 'physical'
+        move = await client.get_move('thunder-punch')
+        assert move.damage_class.name == 'physical'
+        assert move.order is None
         assert (await client.get_type('electric')).damage_relations.double_damage_from[0].name == 'ground'
         assert (await client.get_growth_rate('medium-fast')).formula == 'x^3'
         assert (await client.get_evolution_chain('/evolution-chain/10')).chain.species.name == 'pichu'

@@ -285,16 +285,20 @@ class PokemonService(BaseService[PokemonRepository, Pokemon]):
                 ),
                 None,
             )
+            move_order = external_move.order
+            if move_order is None:
+                move_order = ensure_order_number(f'{move_ref.move.url.rstrip("/")}/')
+
             created = await self.move_repository.create(
                 {
                     'pp': external_move.pp or 0,
                     'url': move_ref.move.url,
                     'type': external_move.type.name,
                     'name': external_move.name,
-                    'order': external_move.order,
+                    'order': move_order,
                     'power': external_move.power or 0,
                     'target': external_move.target.name,
-                    'effect': effect_entry.flavor_text if effect_entry else '',
+                    'effect': effect_entry.effect if effect_entry else '',
                     'priority': external_move.priority,
                     'accuracy': external_move.accuracy or 0,
                     'short_effect': effect_entry.short_effect if effect_entry else '',

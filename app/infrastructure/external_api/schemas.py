@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class NamedApiResourceSchema(BaseModel):
@@ -87,7 +87,9 @@ class PokemonExternalSpecieSchema(BaseModel):
 
 
 class PokemonExternalEffectEntrySchema(BaseModel):
-    flavor_text: str
+    model_config = ConfigDict(populate_by_name=True)
+
+    effect: str = Field(validation_alias=AliasChoices('effect', 'flavor_text'))
     language: NamedApiResourceSchema
     short_effect: str | None = None
 
@@ -96,7 +98,7 @@ class PokemonExternalMoveSchemaResponse(BaseModel):
     pp: int | None = 0
     type: NamedApiResourceSchema
     name: str
-    order: int
+    order: int | None = None
     power: int | None = 0
     target: NamedApiResourceSchema
     effect_entries: list[PokemonExternalEffectEntrySchema]

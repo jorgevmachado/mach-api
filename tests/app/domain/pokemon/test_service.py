@@ -402,12 +402,12 @@ class TestPokemonServiceRelations:
                 pp=15,
                 type=SimpleNamespace(name='electric'),
                 name='thunder-punch',
-                order=9,
+                order=None,
                 power=75,
                 target=SimpleNamespace(name='selected-pokemon'),
                 effect_entries=[
                     SimpleNamespace(
-                        flavor_text='Hit target',
+                        effect='Hit target',
                         short_effect='Hit',
                         language=SimpleNamespace(name='en'),
                     )
@@ -431,6 +431,23 @@ class TestPokemonServiceRelations:
         )
 
         assert result == [existing, created]
+        service.move_repository.create.assert_awaited_once_with(
+            {
+                'pp': 15,
+                'url': '/move/9',
+                'type': 'electric',
+                'name': 'thunder-punch',
+                'order': 9,
+                'power': 75,
+                'target': 'selected-pokemon',
+                'effect': 'Hit target',
+                'priority': 0,
+                'accuracy': 100,
+                'short_effect': 'Hit',
+                'damage_class': 'physical',
+                'effect_chance': None,
+            }
+        )
 
     @staticmethod
     @pytest.mark.asyncio
