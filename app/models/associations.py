@@ -45,3 +45,10 @@ pokemon_evolutions = Table(
     Column('pokemon_id', Uuid, ForeignKey('pokemons.id'), primary_key=True),
     Column('evolution_id', Uuid, ForeignKey('pokemons.id'), primary_key=True),
 )
+
+my_pokemon_pokemon_moves = Table(
+    'my_pokemon_pokemon_moves',
+    metadata,
+    Column('my_pokemon_id', Uuid, ForeignKey('my_pokemons.id'), primary_key=True),
+    Column('pokemon_move_id', Uuid, ForeignKey('pokemon_moves.id'), primary_key=True),
+)

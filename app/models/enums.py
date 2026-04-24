@@ -12,3 +12,10 @@ class StatusEnum(str, Enum):
     COMPLETE = 'COMPLETE'
     INACTIVE = 'INACTIVE'
     INCOMPLETE = 'INCOMPLETE'
+
+
+class PokedexStatusEnum(str, Enum):
+    EMPTY = 'EMPTY'
+    INITIALIZING = 'INITIALIZING'
+    READY = 'READY'
+    FAILED = 'FAILED'

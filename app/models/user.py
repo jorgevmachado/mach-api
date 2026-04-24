@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Enum as SAEnum, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database.base import table_registry
 from app.models.enums import GenderEnum, StatusEnum
+
+if TYPE_CHECKING:
+    from app.models.trainer import Trainer
 
 
 def _utcnow() -> datetime:
@@ -39,6 +43,13 @@ class User:
     authentication_failures: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     last_authentication_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
+    )
+    trainer: Mapped['Trainer | None'] = relationship(
+        'Trainer',
+        lazy='selectin',
+        back_populates='user',
+        default=None,
+        init=False,
     )
 
     # Auto-generated / server-managed — excluded from __init__

@@ -8,9 +8,10 @@ from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database.base import default_lazy, table_registry
-from app.models.associations import pokemon_pokemon_moves
+from app.models.associations import my_pokemon_pokemon_moves, pokemon_pokemon_moves
 
 if TYPE_CHECKING:
+    from app.models.my_pokemon import MyPokemon
     from app.models.pokemon import Pokemon
 
 
@@ -39,6 +40,14 @@ class PokemonMove:
     pokemons: Mapped[list['Pokemon']] = relationship(
         'Pokemon',
         secondary=pokemon_pokemon_moves,
+        back_populates='moves',
+        lazy=default_lazy,
+        default_factory=list,
+        init=False,
+    )
+    my_pokemons: Mapped[list['MyPokemon']] = relationship(
+        'MyPokemon',
+        secondary=my_pokemon_pokemon_moves,
         back_populates='moves',
         lazy=default_lazy,
         default_factory=list,

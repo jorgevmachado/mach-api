@@ -12,6 +12,8 @@ from app.core.settings import Settings
 # Import models so Alembic can see them in table_registry.metadata
 import app.models.user  # noqa: F401
 import app.models.trainer  # noqa: F401
+import app.models.pokedex  # noqa: F401
+import app.models.my_pokemon  # noqa: F401
 import app.models.pokemon  # noqa: F401
 import app.models.pokemon_move  # noqa: F401
 import app.models.pokemon_ability  # noqa: F401

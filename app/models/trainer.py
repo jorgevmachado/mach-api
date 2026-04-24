@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database.base import default_lazy, table_registry
+from app.models.enums import PokedexStatusEnum
 from app.models.user import User
+
+if TYPE_CHECKING:
+    from app.models.my_pokemon import MyPokemon
+    from app.models.pokedex import Pokedex
 
 
 def _utcnow() -> datetime:
@@ -23,9 +29,33 @@ class Trainer:
     user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id'), nullable=False)
     capture_rate: Mapped[int] = mapped_column(Integer, nullable=False)
     pokeballs: Mapped[int] = mapped_column(Integer, nullable=False)
+    pokedex_status: Mapped[PokedexStatusEnum] = mapped_column(
+        SAEnum(PokedexStatusEnum, name='pokedexstatusenum'),
+        default=PokedexStatusEnum.EMPTY,
+        nullable=False,
+    )
 
     # Relationship — not an __init__ parameter
-    user: Mapped[User] = relationship('User', lazy=default_lazy, init=False)
+    user: Mapped[User] = relationship(
+        'User',
+        lazy=default_lazy,
+        back_populates='trainer',
+        init=False,
+    )
+    pokedex_entries: Mapped[list['Pokedex']] = relationship(
+        'Pokedex',
+        back_populates='trainer',
+        lazy=default_lazy,
+        default_factory=list,
+        init=False,
+    )
+    my_pokemons: Mapped[list['MyPokemon']] = relationship(
+        'MyPokemon',
+        back_populates='trainer',
+        lazy=default_lazy,
+        default_factory=list,
+        init=False,
+    )
 
     # Auto-generated / server-managed — excluded from __init__
     id: Mapped[UUID] = mapped_column(primary_key=True, default_factory=uuid4, init=False)

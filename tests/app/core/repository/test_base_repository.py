@@ -16,7 +16,7 @@ from app.shared.schemas import FilterPage
 
 @table_registry.mapped_as_dataclass
 class Pokedex:
-    __tablename__ = 'pokedex'
+    __tablename__ = 'pokedex_test'
 
     trainer_id: Mapped[str] = mapped_column(String, nullable=False)
     pokemon_id: Mapped[str] = mapped_column(ForeignKey('pokemons.id'), nullable=False)
@@ -623,7 +623,7 @@ class TestBaseRepositoryListAll:
         query = mock_session.scalars.await_args.args[0]
 
         assert result == expected_items
-        assert 'pokedex.trainer_id' in str(query)
+        assert 'pokedex_test.trainer_id' in str(query)
         assert 'pokemons."order"' in str(query)
 
     @staticmethod
@@ -721,4 +721,4 @@ class TestBaseRepositoryFindBy:
 
         assert result == expected_entity
         assert 'pokemons.name' in str(query)
-        assert 'pokedex.trainer_id' in str(query)
+        assert 'pokedex_test.trainer_id' in str(query)

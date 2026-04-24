@@ -17,6 +17,8 @@ from app.models.associations import (
 from app.models.enums import StatusEnum
 
 if TYPE_CHECKING:
+    from app.models.my_pokemon import MyPokemon
+    from app.models.pokedex import Pokedex
     from app.models.pokemon_ability import PokemonAbility
     from app.models.pokemon_growth_rate import PokemonGrowthRate
     from app.models.pokemon_move import PokemonMove
@@ -104,6 +106,20 @@ class Pokemon:
         secondary=pokemon_evolutions,
         primaryjoin=lambda: Pokemon.id == pokemon_evolutions.c.pokemon_id,
         secondaryjoin=lambda: Pokemon.id == pokemon_evolutions.c.evolution_id,
+        lazy=default_lazy,
+        default_factory=list,
+        init=False,
+    )
+    pokedex_entries: Mapped[list['Pokedex']] = relationship(
+        'Pokedex',
+        back_populates='pokemon',
+        lazy=default_lazy,
+        default_factory=list,
+        init=False,
+    )
+    my_pokemons: Mapped[list['MyPokemon']] = relationship(
+        'MyPokemon',
+        back_populates='pokemon',
         lazy=default_lazy,
         default_factory=list,
         init=False,

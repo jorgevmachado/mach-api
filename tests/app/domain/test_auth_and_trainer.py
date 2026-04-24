@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import BackgroundTasks
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -18,7 +19,7 @@ from app.domain.trainer.repository import TrainerRepository
 from app.domain.trainer.route import get_trainer_service, initialize_trainer
 from app.domain.trainer.schema import InitializeTrainerRequest
 from app.domain.trainer.service import TrainerService
-from app.models.enums import GenderEnum, StatusEnum
+from app.models.enums import GenderEnum, PokedexStatusEnum, StatusEnum
 
 
 def build_register_request() -> RegisterRequest:
@@ -234,36 +235,77 @@ class TestTrainerRepository:
 class TestTrainerService:
     @staticmethod
     @pytest.mark.asyncio
-    async def test_initialize_rejects_existing_trainer():
+    async def test_initialize_existing_trainer_returns_current_state():
         trainer_repository = AsyncMock()
-        trainer_repository.get_by_user_id.return_value = object()
+        trainer_repository.get_by_user_id.return_value = SimpleNamespace(
+            id=uuid4(),
+            user_id=uuid4(),
+            pokeballs=5,
+            capture_rate=45,
+            pokedex_status=PokedexStatusEnum.READY,
+            created_at=datetime.now(timezone.utc),
+            my_pokemons=[
+                SimpleNamespace(
+                    pokemon=SimpleNamespace(name='pikachu'),
+                )
+            ],
+        )
         user_repository = AsyncMock()
-        service = TrainerService(trainer_repository=trainer_repository, user_repository=user_repository)
+        pokemon_service = AsyncMock()
+        my_pokemon_service = AsyncMock()
+        pokedex_service = AsyncMock()
+        service = TrainerService(
+            trainer_repository=trainer_repository,
+            user_repository=user_repository,
+            pokemon_service=pokemon_service,
+            my_pokemon_service=my_pokemon_service,
+            pokedex_service=pokedex_service,
+        )
 
-        with pytest.raises(HTTPException) as exc_info:
-            await service.initialize(uuid4(), InitializeTrainerRequest(pokeballs=5, capture_rate=45))
+        result = await service.initialize(uuid4(), InitializeTrainerRequest(pokeballs=5, capture_rate=45))
 
-        assert exc_info.value.status_code == HTTPStatus.CONFLICT
-        assert exc_info.value.detail == 'Trainer already initialized'
+        assert result.pokemon_name == 'pikachu'
+        assert result.pokedex_status == PokedexStatusEnum.READY
 
     @staticmethod
     @pytest.mark.asyncio
     async def test_initialize_creates_trainer_and_updates_status():
         trainer_repository = AsyncMock()
-        trainer = SimpleNamespace(id=uuid4())
+        trainer = SimpleNamespace(
+            id=uuid4(),
+            user_id=uuid4(),
+            pokeballs=5,
+            capture_rate=45,
+            pokedex_status=PokedexStatusEnum.INITIALIZING,
+            created_at=datetime.now(timezone.utc),
+        )
         trainer_repository.get_by_user_id.return_value = None
         trainer_repository.create.return_value = trainer
         user_repository = AsyncMock()
+        pokemon = SimpleNamespace(id=uuid4(), name='pikachu', status=StatusEnum.COMPLETE)
+        pokemon_service = AsyncMock()
+        pokemon_service.list_sync.return_value = True
+        pokemon_service.repository.list_all.return_value = [pokemon]
+        my_pokemon_service = AsyncMock()
+        pokedex_service = AsyncMock()
         user_id = uuid4()
-        service = TrainerService(trainer_repository=trainer_repository, user_repository=user_repository)
+        service = TrainerService(
+            trainer_repository=trainer_repository,
+            user_repository=user_repository,
+            pokemon_service=pokemon_service,
+            my_pokemon_service=my_pokemon_service,
+            pokedex_service=pokedex_service,
+        )
 
         result = await service.initialize(
             user_id,
             InitializeTrainerRequest(pokeballs=5, capture_rate=45),
+            background_tasks=BackgroundTasks(),
         )
 
-        assert result is trainer
+        assert result.pokemon_name == 'pikachu'
         user_repository.update_status.assert_awaited_once_with(user_id, StatusEnum.COMPLETE)
+        my_pokemon_service.capture.assert_awaited_once_with(trainer.id, pokemon)
 
 
 class TestTrainerRoutes:
@@ -276,15 +318,16 @@ class TestTrainerRoutes:
     @pytest.mark.asyncio
     async def test_initialize_trainer_route_delegates_to_service():
         user = SimpleNamespace(id=uuid4())
-        trainer = SimpleNamespace(id=uuid4())
+        trainer = SimpleNamespace(id=uuid4(), pokemon_name='pikachu')
         service = AsyncMock()
         service.initialize.return_value = trainer
 
         result = await initialize_trainer(
             InitializeTrainerRequest(pokeballs=5, capture_rate=45),
+            background_tasks=BackgroundTasks(),
             current_user=user,
             service=service,
         )
 
         assert result is trainer
-        service.initialize.assert_awaited_once_with(user.id, InitializeTrainerRequest(pokeballs=5, capture_rate=45))
+        service.initialize.assert_awaited_once()
