@@ -143,8 +143,8 @@ class TestPokemonServiceListCached:
     async def test_list_cached_uses_cache_before_fetching():
         service, _, _ = build_service()
         cached = ['cached-item']
-        service.cache_service.build_key_list = AsyncMock(return_value='pokemon:list')
-        service.cache_service.get_list = AsyncMock(return_value=cached)
+        service.list_cache_service.build_key_list = AsyncMock(return_value='pokemon:list')
+        service.list_cache_service.get_list = AsyncMock(return_value=cached)
         service.list = AsyncMock()
 
         result = await service.list_cached()
@@ -156,15 +156,15 @@ class TestPokemonServiceListCached:
     @pytest.mark.asyncio
     async def test_list_cached_fetches_and_caches_on_miss():
         service, _, _ = build_service()
-        service.cache_service.build_key_list = Mock(return_value='pokemon:list')
-        service.cache_service.get_list = AsyncMock(return_value=None)
-        service.cache_service.set_list = AsyncMock()
+        service.list_cache_service.build_key_list = Mock(return_value='pokemon:list')
+        service.list_cache_service.get_list = AsyncMock(return_value=None)
+        service.list_cache_service.set_list = AsyncMock()
         service.list = AsyncMock(return_value=['fresh'])
 
         result = await service.list_cached()
 
         assert result == ['fresh']
-        service.cache_service.set_list.assert_awaited_once_with('pokemon:list', ['fresh'])
+        service.list_cache_service.set_list.assert_awaited_once_with('pokemon:list', ['fresh'])
 
 
 class TestPokemonServiceHelpers:

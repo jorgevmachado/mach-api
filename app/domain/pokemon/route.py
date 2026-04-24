@@ -10,7 +10,7 @@ from app.core.database import get_session
 from app.core.pagination.schemas import CustomLimitOffsetPage
 from app.core.security import get_current_user
 from app.domain.pokemon.repository import PokemonRepository
-from app.domain.pokemon.schema import PokemonFilterPageSchema, PokemonSchema
+from app.domain.pokemon.schema import PokemonFilterPageSchema, PokemonListSchema, PokemonSchema
 from app.domain.pokemon.service import PokemonService
 from app.domain.pokemon_ability.repository import PokemonAbilityRepository
 from app.domain.pokemon_ability.schema import PokemonAbilitySchema
@@ -66,7 +66,7 @@ def get_pokemon_growth_rate_service(session: Session) -> PokemonGrowthRateServic
     return PokemonGrowthRateService(PokemonGrowthRateRepository(session))
 
 
-@router.get('', response_model=CustomLimitOffsetPage[PokemonSchema], status_code=HTTPStatus.OK)
+@router.get('', response_model=CustomLimitOffsetPage[PokemonListSchema], status_code=HTTPStatus.OK)
 async def list_pokemon(
     _: Annotated[User, Depends(get_current_user)],
     service: Annotated[PokemonService, Depends(get_pokemon_service)],

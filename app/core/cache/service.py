@@ -2,7 +2,7 @@ from typing import Annotated, Optional, Type, TypeVar
 
 from fastapi import Query
 from fastapi_pagination import LimitOffsetPage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.cache.manager import CacheManager
 from app.core.logging import LoggingParams, log_service_exception, log_service_success
@@ -45,32 +45,40 @@ class CacheService:
         self, key: str
     ) -> list[SchemaT] | LimitOffsetPage[SchemaT] | CustomLimitOffsetPage[SchemaT] | None:
         cached = await self.cache.get_cache(key)
-        if cached and 'type' in cached and cached['type'] == 'list':
-            list_deserialized: list[SchemaT] = []
-            for item in cached['data']:
-                if not isinstance(item, dict):
-                    continue
-                list_deserialized.append(self.schema_class.model_validate(item))
-            log_service_success(
+        try:
+            if cached and 'type' in cached and cached['type'] == 'list':
+                list_deserialized: list[SchemaT] = []
+                for item in cached['data']:
+                    if not isinstance(item, dict):
+                        continue
+                    list_deserialized.append(self.schema_class.model_validate(item))
+                log_service_success(
+                    self.logger_params,
+                    operation='cache_get_list',
+                    message=f'List of {self.alias} stored in cache.',
+                )
+                return list_deserialized
+            if cached and 'type' in cached and cached['type'] == 'paginate':
+                log_service_success(
+                    self.logger_params,
+                    operation='cache_get_list',
+                    message=f'Paginated list of cached {self.alias}',
+                )
+                return LimitOffsetPage[self.schema_class].model_validate(cached['data'])
+            if cached and 'type' in cached and cached['type'] == 'custom-paginate':
+                log_service_success(
+                    self.logger_params,
+                    operation='cache_get_list',
+                    message=f'Custom paginated list of cached {self.alias}',
+                )
+                return CustomLimitOffsetPage[self.schema_class].model_validate(cached['data'])
+        except ValidationError:
+            log_service_exception(
                 self.logger_params,
                 operation='cache_get_list',
-                message=f'List of {self.alias} stored in cache.',
+                message=f'Cached {self.alias} data is invalid for the current schema. Ignoring cache.',
             )
-            return list_deserialized
-        if cached and 'type' in cached and cached['type'] == 'paginate':
-            log_service_success(
-                self.logger_params,
-                operation='cache_get_list',
-                message=f'Paginated list of cached {self.alias}',
-            )
-            return LimitOffsetPage[self.schema_class].model_validate(cached['data'])
-        if cached and 'type' in cached and cached['type'] == 'custom-paginate':
-            log_service_success(
-                self.logger_params,
-                operation='cache_get_list',
-                message=f'Custom paginated list of cached {self.alias}',
-            )
-            return CustomLimitOffsetPage[self.schema_class].model_validate(cached['data'])
+            return None
         log_service_success(
             self.logger_params,
             operation='cache_get_list',

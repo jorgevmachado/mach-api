@@ -7,11 +7,12 @@ from http import HTTPStatus
 from fastapi import HTTPException
 
 from app.core.cache.manager import CacheManager
+from app.core.cache.service import CacheService
 from app.core.exceptions import handle_service_exception
 from app.core.logging import LoggingParams
 from app.core.service.base import BaseService
 from app.domain.pokemon.repository import PokemonRepository
-from app.domain.pokemon.schema import PokemonFilterPageSchema, PokemonSchema
+from app.domain.pokemon.schema import PokemonFilterPageSchema, PokemonListSchema, PokemonSchema
 from app.domain.pokemon_ability.repository import PokemonAbilityRepository
 from app.domain.pokemon_growth_rate.repository import PokemonGrowthRateRepository
 from app.domain.pokemon_move.repository import PokemonMoveRepository
@@ -94,6 +95,12 @@ class PokemonService(BaseService[PokemonRepository, Pokemon]):
         self.growth_rate_repository = growth_rate_repository
         self.pokeapi_client = pokeapi_client
         self.meta_cache = CacheManager()
+        self.list_cache_service = CacheService(
+            alias='pokemon',
+            prefix='pokemon',
+            logger_params=logger_params,
+            schema_class=PokemonListSchema,
+        )
 
     async def total(self) -> int:
         return await self.repository.total()
@@ -186,12 +193,12 @@ class PokemonService(BaseService[PokemonRepository, Pokemon]):
         user_request: str | None = None,
     ):
         filter_page = PokemonFilterPageSchema.build(page_filter)
-        key = self.cache_service.build_key_list(page_filter=filter_page)
-        cached = await self.cache_service.get_list(key)
+        key = self.list_cache_service.build_key_list(page_filter=filter_page)
+        cached = await self.list_cache_service.get_list(key)
         if cached:
             return cached
         result = await self.list(page_filter=filter_page, user_request=user_request)
-        await self.cache_service.set_list(key, result)
+        await self.list_cache_service.set_list(key, result)
         return result
 
     async def get(self, name_or_id: str) -> Pokemon:

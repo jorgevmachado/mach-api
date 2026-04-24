@@ -5,15 +5,27 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.pokemon_ability.schema import PokemonAbilitySchema
+from app.domain.pokemon_growth_rate.schema import PokemonGrowthRateSchema
+from app.domain.pokemon_move.schema import PokemonMoveSchema
+from app.domain.pokemon_type.schema import PokemonTypeSchema
 from app.models.enums import StatusEnum
 from app.shared.schemas import FilterPage
 
 
-class PokemonRelatedNameSchema(BaseModel):
+class PokemonSummarySchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
+    order: int
+    status: StatusEnum
+    external_image: str
+    image: str | None = None
+
+
+class PokemonListSchema(PokemonSummarySchema):
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PokemonSchema(BaseModel):
@@ -47,11 +59,11 @@ class PokemonSchema(BaseModel):
     evolution_chain: str | None = None
     evolves_from_species: str | None = None
     has_gender_differences: bool | None = None
-    growth_rate: PokemonRelatedNameSchema | None = None
-    moves: list[PokemonRelatedNameSchema] = []
-    abilities: list[PokemonRelatedNameSchema] = []
-    types: list[PokemonRelatedNameSchema] = []
-    evolutions: list[PokemonRelatedNameSchema] = []
+    growth_rate: PokemonGrowthRateSchema | None = None
+    moves: list[PokemonMoveSchema] = []
+    abilities: list[PokemonAbilitySchema] = []
+    types: list[PokemonTypeSchema] = []
+    evolutions: list[PokemonSummarySchema] = []
     created_at: datetime
     updated_at: datetime | None = None
     deleted_at: datetime | None = None

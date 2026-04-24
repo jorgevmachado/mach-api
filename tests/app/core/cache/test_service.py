@@ -115,6 +115,36 @@ class TestCacheServiceGetList:
         assert isinstance(result, LimitOffsetPage)
         assert result.total == 1
 
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_cache_service_get_list_returns_none_for_invalid_cached_schema(cache_service):
+        key = 'test_cache:list:custom-paginate'
+        cached_data = {
+            'type': 'custom-paginate',
+            'data': {
+                'items': [
+                    {
+                        'id': '1',
+                        'name': 'bulbasaur',
+                    }
+                ],
+                'meta': {
+                    'total': 1,
+                    'limit': 10,
+                    'offset': 0,
+                    'next_page': None,
+                    'previous_page': None,
+                    'total_pages': 1,
+                    'current_page': 1,
+                },
+            },
+        }
+        cache_service.cache.get_cache = AsyncMock(return_value=cached_data)
+
+        result = await cache_service.get_list(key)
+
+        assert result is None
+
 
 class TestCacheServiceSetList:
     @staticmethod

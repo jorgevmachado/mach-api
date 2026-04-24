@@ -87,10 +87,66 @@ class TestPokemonRoutes:
                 'order': 25,
                 'status': 'COMPLETE',
                 'external_image': 'https://image/pikachu.png',
-                'moves': [],
-                'abilities': [],
-                'types': [],
-                'evolutions': [],
+                'moves': [
+                    {
+                        'id': str(uuid4()),
+                        'name': 'quick-attack',
+                        'pp': 30,
+                        'url': '/move/98',
+                        'type': 'normal',
+                        'order': 98,
+                        'power': 40,
+                        'target': 'selected-pokemon',
+                        'effect': 'Inflicts regular damage.',
+                        'priority': 1,
+                        'accuracy': 100,
+                        'short_effect': 'Usually goes first.',
+                        'damage_class': 'physical',
+                        'effect_chance': None,
+                        'created_at': '2026-04-23T00:00:00Z',
+                    }
+                ],
+                'abilities': [
+                    {
+                        'id': str(uuid4()),
+                        'url': '/ability/9',
+                        'order': 1,
+                        'name': 'static',
+                        'slot': 1,
+                        'is_hidden': False,
+                        'created_at': '2026-04-23T00:00:00Z',
+                    }
+                ],
+                'types': [
+                    {
+                        'id': str(uuid4()),
+                        'url': '/type/13',
+                        'order': 13,
+                        'name': 'electric',
+                        'text_color': '#212121',
+                        'background_color': '#F8D030',
+                        'weaknesses': [
+                            {
+                                'id': str(uuid4()),
+                                'name': 'ground',
+                                'text_color': '#f5f5f5',
+                                'background_color': '#bc5e00',
+                            }
+                        ],
+                        'strengths': [],
+                        'created_at': '2026-04-23T00:00:00Z',
+                    }
+                ],
+                'evolutions': [
+                    {
+                        'id': str(uuid4()),
+                        'name': 'raichu',
+                        'order': 26,
+                        'status': 'COMPLETE',
+                        'external_image': 'https://image/raichu.png',
+                        'image': 'https://image/raichu-sprite.png',
+                    }
+                ],
                 'created_at': '2026-04-23T00:00:00Z',
             }
         )
@@ -102,6 +158,9 @@ class TestPokemonRoutes:
         )
 
         assert response['name'] == 'pikachu'
+        assert response['moves'][0]['damage_class'] == 'physical'
+        assert response['types'][0]['weaknesses'][0]['background_color'] == '#bc5e00'
+        assert response['evolutions'][0]['external_image'] == 'https://image/raichu.png'
 
 
 class TestPokemonRelatedResourceRoutes:

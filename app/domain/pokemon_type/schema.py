@@ -11,6 +11,8 @@ class PokemonTypeRelationSchema(BaseModel):
 
     id: UUID
     name: str
+    text_color: str
+    background_color: str
 
 
 class PokemonTypeSchema(BaseModel):

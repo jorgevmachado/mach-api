@@ -17,6 +17,7 @@ from app.domain.pokemon.route import (
     list_growth_rates,
     list_types,
 )
+from app.domain.pokemon.schema import PokemonSchema
 from app.domain.pokemon.service import PokemonService, _pick_sprite_image
 from app.domain.pokemon_ability.repository import PokemonAbilityRepository
 from app.domain.pokemon_ability.service import PokemonAbilityService
@@ -31,6 +32,7 @@ from app.models.pokemon import Pokemon
 from app.models.pokemon_ability import PokemonAbility
 from app.models.pokemon_growth_rate import PokemonGrowthRate
 from app.models.pokemon_move import PokemonMove
+from app.models.pokemon_type import PokemonType
 from app.infrastructure.external_api.schemas import PokemonExternalBaseSpritesSchemaResponse
 
 
@@ -210,3 +212,68 @@ class TestPokemonRepositoriesServicesAndModels:
         assert ability.created_at is not None
         assert growth_rate.created_at is not None
         assert move.created_at is not None
+
+    def test_pokemon_schema_serializes_rich_detail_relationships(self):
+        pokemon = Pokemon(
+            name='pikachu',
+            order=25,
+            external_image='https://image/pikachu.png',
+            status=StatusEnum.COMPLETE,
+        )
+        pokemon.image = 'https://image/pikachu-sprite.png'
+        pokemon.moves = [
+            PokemonMove(
+                pp=30,
+                url='/move/98',
+                type='normal',
+                name='quick-attack',
+                order=98,
+                power=40,
+                target='selected-pokemon',
+                effect='Inflicts regular damage.',
+                priority=1,
+                accuracy=100,
+                short_effect='Usually goes first.',
+                damage_class='physical',
+                effect_chance=None,
+            )
+        ]
+        pokemon.abilities = [
+            PokemonAbility(
+                url='/ability/9',
+                order=1,
+                name='static',
+                slot=1,
+                is_hidden=False,
+            )
+        ]
+        electric = PokemonType(url='/type/13', order=13, name='electric')
+        ground = PokemonType(url='/type/5', order=5, name='ground')
+        water = PokemonType(url='/type/11', order=11, name='water')
+        electric.weaknesses = [ground]
+        electric.strengths = [water]
+        pokemon.types = [electric]
+        pokemon.growth_rate = PokemonGrowthRate(
+            url='/growth-rate/2',
+            name='medium-fast',
+            formula='x^3',
+            description='Medium fast',
+        )
+        raichu = Pokemon(
+            name='raichu',
+            order=26,
+            external_image='https://image/raichu.png',
+            status=StatusEnum.COMPLETE,
+        )
+        raichu.image = 'https://image/raichu-sprite.png'
+        pokemon.evolutions = [raichu]
+
+        serialized = PokemonSchema.model_validate(pokemon)
+
+        assert serialized.moves[0].damage_class == 'physical'
+        assert serialized.abilities[0].slot == 1
+        assert serialized.types[0].text_color == electric.text_color
+        assert serialized.types[0].weaknesses[0].background_color == ground.background_color
+        assert serialized.types[0].strengths[0].name == 'water'
+        assert serialized.growth_rate is not None
+        assert serialized.evolutions[0].external_image == 'https://image/raichu.png'
