@@ -284,8 +284,18 @@ class BaseRepository(Generic[ModelT]):
                 )
 
             result_paginate = await paginate(self.session, query, params=params)
+
+            if isinstance(result_paginate, CustomLimitOffsetPage):
+                return result_paginate
+
+            total = getattr(result_paginate, 'total', None)
+            if total is None and hasattr(result_paginate, 'meta'):
+                total = getattr(result_paginate.meta, 'total', None)
+
             return CustomLimitOffsetPage.create(
-                items=result_paginate.items, total=result_paginate.total, params=params
+                items=result_paginate.items,
+                total=total,
+                params=params,
             )
         result = await self.session.scalars(query)
         return result.all()

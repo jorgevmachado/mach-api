@@ -1,72 +1,94 @@
+from __future__ import annotations
+
+import os
 from contextlib import contextmanager
 from datetime import datetime
 
 import pytest
 import pytest_asyncio
-import redis.asyncio as redis
+import redis
 from fastapi.testclient import TestClient
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from testcontainers.postgres import PostgresContainer
-from testcontainers.redis import RedisContainer
+
+os.environ.setdefault('ALGORITHM', 'HS256')
+os.environ.setdefault('REDIS_HOST', 'localhost')
+os.environ.setdefault('REDIS_PORT', '6379')
+os.environ.setdefault('SECRET_KEY', 'test-secret')
+os.environ.setdefault('DATABASE_URL', 'sqlite+aiosqlite:///:memory:')
+os.environ.setdefault('ACCESS_TOKEN_EXPIRE_MINUTES', '30')
 
 import app.core.cache.redis as core_redis
-from app.core.database import get_session, table_registry
+from app.core.database import get_session
 from app.main import app
 
 
-@pytest.fixture
-def client(session):
-    def get_session_override():
-        return session
+class FakeSession:
+    async def scalar(self, *args, **kwargs):
+        return None
 
+    async def execute(self, *args, **kwargs):
+        return None
+
+    async def commit(self):
+        return None
+
+    async def rollback(self):
+        return None
+
+    async def refresh(self, *args, **kwargs):
+        return None
+
+    def add(self, *args, **kwargs):
+        return None
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self._data: dict[str, str] = {}
+
+    async def get(self, key: str):
+        return self._data.get(key)
+
+    async def setex(self, key: str, ttl: int, value: str):
+        if ttl <= 0:
+            raise redis.exceptions.ResponseError('invalid expire time in setex')
+        self._data[key] = value
+        return True
+
+    async def flushdb(self):
+        self._data.clear()
+        return True
+
+    async def ping(self):
+        return True
+
+    async def aclose(self):
+        return None
+
+
+@pytest.fixture
+def client():
+    fake_session = FakeSession()
+
+    async def get_session_override():
+        return fake_session
+
+    app.dependency_overrides[get_session] = get_session_override
     with TestClient(app) as client:
-        app.dependency_overrides[get_session] = get_session_override
         yield client
 
     app.dependency_overrides.clear()
 
 
-@pytest.fixture(scope='session')
-def engine():
-    with PostgresContainer('postgres:17', driver='psycopg') as postgres:
-        _engine = create_async_engine(postgres.get_connection_url())
-        yield _engine
-
-
-@pytest.fixture(scope='session')
-def redis_container():
-    with RedisContainer('redis:7.4') as container:
-        yield container
-
-
-@pytest_asyncio.fixture
-async def session(engine):
-    async with engine.begin() as conn:
-        await conn.run_sync(table_registry.metadata.create_all)
-
-    async with AsyncSession(engine, expire_on_commit=False) as session:
-        yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(table_registry.metadata.drop_all)
-
-
 @pytest_asyncio.fixture(scope='function')
-async def redis_client(monkeypatch, redis_container):
-    client = redis.Redis(
-        host=redis_container.get_container_host_ip(),
-        port=int(redis_container.get_exposed_port(6379)),
-        decode_responses=True,
-    )
-
+async def redis_client(monkeypatch):
+    client = FakeRedis()
     monkeypatch.setattr(core_redis, 'redis_client', client)
 
     await client.flushdb()
     yield client
     await client.flushdb()
     await client.aclose()
-
 
 @pytest_asyncio.fixture(autouse=True)
 async def flush_redis(redis_client):
@@ -75,9 +97,8 @@ async def flush_redis(redis_client):
     await redis_client.flushdb()
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 def redis_cache(redis_client):
-    """Fixture para uso explícito do Redis em testes unitários de cache."""
     yield redis_client
 
 
@@ -99,11 +120,3 @@ def _mock_db_time(*, model, time=datetime(2024, 1, 1)):
 @pytest.fixture
 def mock_db_time():
     return _mock_db_time
-
-@pytest.fixture
-def token(client, trainer):
-    response = client.post(
-        '/auth/token',
-        json={'email': trainer.email, 'password': trainer.clean_password},
-    )
-    return response.json()['access_token']

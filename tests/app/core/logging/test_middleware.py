@@ -3,9 +3,9 @@ import re
 from http import HTTPStatus
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
+from starlette.datastructures import Headers
 
 from app.core.context.request_context import request_id_ctx
 from app.core.logging.middleware import logging_middleware
@@ -18,24 +18,36 @@ def get_logged_record(caplog, levelname, logger_name='app'):
     return None
 
 
-def test_logging_middleware_success(monkeypatch, caplog):
-    app = FastAPI()
+def build_request(path: str) -> Request:
+    return Request(
+        {
+            'type': 'http',
+            'http_version': '1.1',
+            'method': 'GET',
+            'scheme': 'http',
+            'path': path,
+            'raw_path': path.encode(),
+            'query_string': b'',
+            'headers': Headers().raw,
+            'client': ('testclient', 50000),
+            'server': ('testserver', 80),
+        }
+    )
 
-    @app.middleware('http')
-    async def custom_logging_middleware(request: Request, call_next):
-        return await logging_middleware(request, call_next)
 
-    @app.get('/ok')
-    async def ok():
-        return {'msg': 'ok'}
+@pytest.mark.asyncio
+async def test_logging_middleware_success(caplog):
+    request = build_request('/ok')
+
+    async def call_next(_: Request):
+        return JSONResponse({'msg': 'ok'}, status_code=HTTPStatus.OK)
 
     # Set up app logger to propagate to root so caplog can capture
     app_logger = logging.getLogger('app')
     app_logger.propagate = True
 
-    client = TestClient(app)
     with caplog.at_level(logging.INFO, logger='app'):
-        response = client.get('/ok')
+        response = await logging_middleware(request, call_next)
     assert response.status_code == HTTPStatus.OK
     # Print all log records for debugging
     print('Captured log records:')
@@ -51,25 +63,20 @@ def test_logging_middleware_success(monkeypatch, caplog):
     assert isinstance(record.duration, int)
 
 
-def test_logging_middleware_exception(monkeypatch, caplog):
-    app = FastAPI()
+@pytest.mark.asyncio
+async def test_logging_middleware_exception(caplog):
+    request = build_request('/fail')
 
-    @app.middleware('http')
-    async def custom_logging_middleware(request: Request, call_next):
-        return await logging_middleware(request, call_next)
-
-    @app.get('/fail')
-    async def fail():
+    async def call_next(_: Request):
         raise ValueError('fail!')
 
     # Set up app logger to propagate to root so caplog can capture
     app_logger = logging.getLogger('app')
     app_logger.propagate = True
 
-    client = TestClient(app)
     with caplog.at_level(logging.ERROR, logger='app'):
         with pytest.raises(ValueError, match='fail!'):
-            client.get('/fail')
+            await logging_middleware(request, call_next)
     print('Captured log records:')
     for r in caplog.records:
         print(f'LOG: {r.levelname} {r.name} {r.getMessage()}')
@@ -83,21 +90,19 @@ def test_logging_middleware_exception(monkeypatch, caplog):
     assert isinstance(record.duration, int)
 
 
-def test_request_id_ctx_set_in_middleware():
-    app = FastAPI()
+@pytest.mark.asyncio
+async def test_request_id_ctx_set_in_middleware():
     request_ids = []
+    request = build_request('/id')
 
-    @app.middleware('http')
-    async def custom_logging_middleware(request: Request, call_next):
-        await logging_middleware(request, call_next)
+    async def inner_call_next(_: Request):
+        return JSONResponse({'ok': True})
+
+    async def call_next(request: Request):
+        await logging_middleware(request, inner_call_next)
         request_ids.append(request_id_ctx.get())
         return JSONResponse({'ok': True})
 
-    @app.get('/id')
-    async def get_id():
-        return {'msg': 'ok'}
-
-    client = TestClient(app)
-    client.get('/id')
+    await call_next(request)
     assert request_ids[0] is not None
     assert re.match(r'^[0-9a-f\-]{36}$', request_ids[0])

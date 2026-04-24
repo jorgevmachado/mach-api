@@ -1,15 +1,31 @@
 import types
+from uuid import uuid4
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi_pagination import LimitOffsetPage, LimitOffsetParams
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import ForeignKey, String, select
+from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
+from app.core.database.base import table_registry
+from app.core.pagination.schemas import CustomLimitOffsetPage
 from app.core.repository import BaseRepository
-from app.models.pokedex import Pokedex
 from app.models.pokemon import Pokemon
 from app.shared.schemas import FilterPage
+
+
+@table_registry.mapped_as_dataclass
+class Pokedex:
+    __tablename__ = 'pokedex'
+
+    trainer_id: Mapped[str] = mapped_column(String, nullable=False)
+    pokemon_id: Mapped[str] = mapped_column(ForeignKey('pokemons.id'), nullable=False)
+    nickname: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+
+    pokemon: Mapped[Pokemon] = relationship('Pokemon', init=False)
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default_factory=lambda: str(uuid4()), init=False
+    )
 
 
 class PokemonBaseRepository(BaseRepository[Pokemon]):
@@ -52,7 +68,7 @@ class TestBaseRepositoryApplyOrderBy:
 
         result_query = repository._apply_order_by(query)
 
-        assert 'ORDER BY pokemon."order"' in str(result_query)
+        assert 'ORDER BY pokemons."order"' in str(result_query)
 
     @staticmethod
     def test_apply_order_by_uses_page_filter_order_by_when_provided():
@@ -62,7 +78,7 @@ class TestBaseRepositoryApplyOrderBy:
 
         result_query = repository._apply_order_by(query, page_filter)
 
-        assert 'ORDER BY pokemon.name' in str(result_query)
+        assert 'ORDER BY pokemons.name' in str(result_query)
 
     @staticmethod
     def test_apply_order_by_applies_outer_join_for_relationship_path():
@@ -73,8 +89,8 @@ class TestBaseRepositoryApplyOrderBy:
         result_query = repository._apply_order_by(query, page_filter)
         result_query_str = str(result_query)
 
-        assert 'LEFT OUTER JOIN pokemon' in result_query_str
-        assert 'ORDER BY pokemon."order"' in result_query_str
+        assert 'LEFT OUTER JOIN pokemons' in result_query_str
+        assert 'ORDER BY pokemons."order"' in result_query_str
 
     @staticmethod
     def test_apply_order_by_raises_error_when_relation_is_invalid():
@@ -164,7 +180,7 @@ class TestBaseRepositoryRelationHelpers:
 
         predicate_sql = str(predicate)
         assert predicate is not None
-        assert 'types.name' in predicate_sql
+        assert 'pokemon_types.name' in predicate_sql
 
     @staticmethod
     def test_build_name_predicate_builds_has_for_scalar_relationship():
@@ -176,7 +192,7 @@ class TestBaseRepositoryRelationHelpers:
 
         predicate_sql = str(predicate)
         assert predicate is not None
-        assert 'pokemon.name' in predicate_sql
+        assert 'pokemons.name' in predicate_sql
 
     @staticmethod
     def test_build_name_predicate_returns_none_when_related_model_has_no_name_attr():
@@ -242,7 +258,7 @@ class TestBaseRepositoryRelationHelpers:
 
         predicate_sql = str(predicate)
         assert predicate is not None
-        assert 'types.name' in predicate_sql
+        assert 'pokemon_types.name' in predicate_sql
 
     @staticmethod
     def test_build_nested_predicate_returns_none_when_nested_predicate_is_none():
@@ -276,7 +292,7 @@ class TestBaseRepositoryRelationHelpers:
             )
 
         assert predicate is not None
-        assert 'pokemon.name' in str(predicate)
+        assert 'pokemons.name' in str(predicate)
 
     @staticmethod
     def test_build_relation_predicate_handles_empty_path():
@@ -301,7 +317,7 @@ class TestBaseRepositoryRelationHelpers:
         predicate = repository._build_relation_predicate(Pokemon, ['name'], 'pikachu')
 
         assert predicate is not None
-        assert 'pokemon.name' in str(predicate)
+        assert 'pokemons.name' in str(predicate)
 
     @staticmethod
     def test_build_relation_predicate_builds_nested_relationship_predicate():
@@ -310,7 +326,7 @@ class TestBaseRepositoryRelationHelpers:
         predicate = repository._build_relation_predicate(Pokemon, ['types', 'name'], 'fire')
 
         assert predicate is not None
-        assert 'types.name' in str(predicate)
+        assert 'pokemon_types.name' in str(predicate)
 
     @staticmethod
     def test_apply_relations_filters_returns_query_when_relation_attr_not_found():
@@ -364,7 +380,7 @@ class TestBaseRepositoryRelationHelpers:
             )
 
         assert result_query is not query
-        assert 'pokemon.name' in str(result_query)
+        assert 'pokemons.name' in str(result_query)
 
     @staticmethod
     def test_apply_relations_filters_returns_same_query_when_no_predicates_generated():
@@ -391,7 +407,7 @@ class TestBaseRepositoryRelationHelpers:
         )
 
         assert result_query is not query
-        assert 'types.name' in str(result_query)
+        assert 'pokemon_types.name' in str(result_query)
 
 
 class TestBaseRepositoryTotal:
@@ -512,6 +528,62 @@ class TestBaseRepositoryListAll:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_list_all_returns_custom_paginate_directly_when_paginate_already_matches():
+        params = LimitOffsetParams(limit=50, offset=0)
+        expected_page = CustomLimitOffsetPage.create(
+            items=['pikachu'],
+            total=1,
+            params=params,
+        )
+        mock_session = AsyncMock()
+        repository = PokemonBaseRepository(session=mock_session)
+        page_filter = FilterPage(offset=0, limit=50)
+
+        with (
+            patch('app.core.repository.base.is_paginate', return_value=True),
+            patch(
+                'app.core.repository.base.get_limit_offset_params',
+                return_value=params,
+            ),
+            patch(
+                'app.core.repository.base.paginate', new_callable=AsyncMock
+            ) as paginate_mock,
+        ):
+            paginate_mock.return_value = expected_page
+            result = await repository.list_all(page_filter=page_filter)
+
+        assert result is expected_page
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_list_all_uses_paginate_meta_total_when_total_attr_is_missing():
+        params = LimitOffsetParams(limit=50, offset=0)
+        paginate_result = types.SimpleNamespace(
+            items=['pikachu'],
+            meta=types.SimpleNamespace(total=1),
+        )
+        mock_session = AsyncMock()
+        repository = PokemonBaseRepository(session=mock_session)
+        page_filter = FilterPage(offset=0, limit=50)
+
+        with (
+            patch('app.core.repository.base.is_paginate', return_value=True),
+            patch(
+                'app.core.repository.base.get_limit_offset_params',
+                return_value=params,
+            ),
+            patch(
+                'app.core.repository.base.paginate', new_callable=AsyncMock
+            ) as paginate_mock,
+        ):
+            paginate_mock.return_value = paginate_result
+            result = await repository.list_all(page_filter=page_filter)
+
+        assert result.items == ['pikachu']
+        assert result.meta.total == 1
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_list_all_applies_filter_by_from_page_filter():
         expected_items = ['pikachu']
         scalars_result = Mock()
@@ -528,7 +600,7 @@ class TestBaseRepositoryListAll:
         query = mock_session.scalars.await_args.args[0]
 
         assert result == expected_items
-        assert 'pokemon.name' in str(query)
+        assert 'pokemons.name' in str(query)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -552,7 +624,7 @@ class TestBaseRepositoryListAll:
 
         assert result == expected_items
         assert 'pokedex.trainer_id' in str(query)
-        assert 'pokemon."order"' in str(query)
+        assert 'pokemons."order"' in str(query)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -575,7 +647,7 @@ class TestBaseRepositoryListAll:
         query_str = str(query)
 
         assert result == expected_items
-        assert 'types.name' in query_str
+        assert 'pokemon_types.name' in query_str
 
     @staticmethod
     @pytest.mark.asyncio
@@ -648,5 +720,5 @@ class TestBaseRepositoryFindBy:
         query = mock_session.scalar.await_args.args[0]
 
         assert result == expected_entity
-        assert 'pokemon.name' in str(query)
+        assert 'pokemons.name' in str(query)
         assert 'pokedex.trainer_id' in str(query)

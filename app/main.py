@@ -5,6 +5,7 @@ from fastapi_pagination import add_pagination
 
 from app.core.logging import configure_logging
 from app.domain.auth.route import router as auth_router
+from app.domain.pokemon.route import router as pokemon_router
 from app.domain.trainer.route import router as trainer_router
 from app.shared.schemas import Message
 
@@ -14,6 +15,7 @@ app = FastAPI()
 add_pagination(app)
 
 app.include_router(auth_router, prefix='/auth', tags=['Auth'])
+app.include_router(pokemon_router, prefix='/pokemon', tags=['Pokemon'])
 app.include_router(trainer_router, prefix='/trainers', tags=['Trainers'])
 
 

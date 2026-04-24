@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.core.cache.manager import CacheManager
 from app.core.logging import LoggingParams, log_service_exception, log_service_success
+from app.core.pagination.schemas import CustomLimitOffsetPage
 from app.shared.schemas import FilterPage
 
 SchemaT = TypeVar('SchemaT', bound=BaseModel)
@@ -40,7 +41,9 @@ class CacheService:
         )
         return self.cache.build_key(self.prefix, 'list', filter_page.model_dump())
 
-    async def get_list(self, key: str) -> list[SchemaT] | LimitOffsetPage[SchemaT] | None:
+    async def get_list(
+        self, key: str
+    ) -> list[SchemaT] | LimitOffsetPage[SchemaT] | CustomLimitOffsetPage[SchemaT] | None:
         cached = await self.cache.get_cache(key)
         if cached and 'type' in cached and cached['type'] == 'list':
             list_deserialized: list[SchemaT] = []
@@ -61,6 +64,13 @@ class CacheService:
                 message=f'Paginated list of cached {self.alias}',
             )
             return LimitOffsetPage[self.schema_class].model_validate(cached['data'])
+        if cached and 'type' in cached and cached['type'] == 'custom-paginate':
+            log_service_success(
+                self.logger_params,
+                operation='cache_get_list',
+                message=f'Custom paginated list of cached {self.alias}',
+            )
+            return CustomLimitOffsetPage[self.schema_class].model_validate(cached['data'])
         log_service_success(
             self.logger_params,
             operation='cache_get_list',
@@ -72,7 +82,7 @@ class CacheService:
     async def set_list(
         self,
         key: str,
-        data: list[SchemaT] | LimitOffsetPage[SchemaT],
+        data: list[SchemaT] | LimitOffsetPage[SchemaT] | CustomLimitOffsetPage[SchemaT],
         ttl: Optional[int] = None,
     ) -> None:
         cache_ttl = ttl or self.ttl
@@ -100,6 +110,21 @@ class CacheService:
                 self.logger_params,
                 operation='cache_set_list',
                 message=f'Paginated list of {self.alias} successfully cached.',
+            )
+            return None
+        if isinstance(data, CustomLimitOffsetPage):
+            list_serialized = (
+                CustomLimitOffsetPage[self.schema_class]
+                .model_validate(data)
+                .model_dump(mode='json')
+            )
+            await self.cache.set_cache(
+                key, {'type': 'custom-paginate', 'data': list_serialized}, cache_ttl
+            )
+            log_service_success(
+                self.logger_params,
+                operation='cache_set_list',
+                message=f'Custom paginated list of {self.alias} successfully cached.',
             )
             return None
 

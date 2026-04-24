@@ -1,8 +1,12 @@
 from http import HTTPStatus
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
 from jwt import decode
 
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_current_user
 from app.core.settings import Settings
 
 
@@ -17,26 +21,36 @@ def test_jwt():
     assert 'exp' in decoded
 
 
-def test_jwt_invalid_token(client):
-    response = client.get('/trainers/1', headers={'Authorization': 'Bearer invalid'})
-    assert response.status_code == HTTPStatus.UNAUTHORIZED
-    assert response.json() == {'detail': 'Could not validate credentials'}
+@pytest.mark.asyncio
+async def test_jwt_invalid_token():
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_user(session=AsyncMock(), token='invalid')
+
+    assert exc_info.value.status_code == HTTPStatus.UNAUTHORIZED
+    assert exc_info.value.detail == 'Could not validate credentials'
 
 
-def test_get_current_user_not_found(client):
+@pytest.mark.asyncio
+async def test_get_current_user_not_found():
     data = {'no-email': 'no-email'}
     token = create_access_token(data)
 
-    response = client.get('/trainers/1', headers={'Authorization': f'Bearer {token}'})
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_user(session=AsyncMock(), token=token)
 
-    assert response.status_code == HTTPStatus.UNAUTHORIZED
-    assert response.json() == {'detail': 'Could not validate credentials'}
+    assert exc_info.value.status_code == HTTPStatus.UNAUTHORIZED
+    assert exc_info.value.detail == 'Could not validate credentials'
 
 
-def test_get_current_user_does_not_exists(client):
-    data = {'sub': 'test@test.com'}
+@pytest.mark.asyncio
+async def test_get_current_user_does_not_exists():
+    data = {'sub': str(uuid4())}
     token = create_access_token(data)
+    session = AsyncMock()
+    session.scalar = AsyncMock(return_value=None)
 
-    response = client.get('/trainers/1', headers={'Authorization': f'Bearer {token}'})
-    assert response.status_code == HTTPStatus.UNAUTHORIZED
-    assert response.json() == {'detail': 'Could not validate credentials'}
+    with pytest.raises(HTTPException) as exc_info:
+        await get_current_user(session=session, token=token)
+
+    assert exc_info.value.status_code == HTTPStatus.UNAUTHORIZED
+    assert exc_info.value.detail == 'Could not validate credentials'
