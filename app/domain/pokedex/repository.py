@@ -22,7 +22,7 @@ class PokedexRepository(BaseRepository[Pokedex]):
         .selectinload(PokemonType.strengths),
         selectinload(Pokedex.pokemon).selectinload(Pokemon.growth_rate),
     )
-    default_order_by = 'pokemon.order'
+    default_order_by = 'discovered_at'
 
     async def create(self, data: dict) -> Pokedex:
         return await self.save(Pokedex(**data))

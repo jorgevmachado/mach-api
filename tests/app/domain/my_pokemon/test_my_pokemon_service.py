@@ -164,3 +164,111 @@ class TestMyPokemonService:
         )
 
         assert result.nickname == 'Sparky'
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_get_trainer_returns_detail_with_type_relations_loaded():
+        service, repository, _ = build_my_pokemon_service()
+        entry = SimpleNamespace(
+            id=uuid4(),
+            hp=30,
+            iv_hp=0,
+            ev_hp=0,
+            wins=0,
+            level=1,
+            losses=0,
+            max_hp=30,
+            battles=0,
+            nickname='Sparky',
+            speed=10,
+            iv_speed=0,
+            ev_speed=0,
+            attack=10,
+            iv_attack=0,
+            ev_attack=0,
+            defense=10,
+            iv_defense=0,
+            ev_defense=0,
+            experience=0,
+            special_attack=10,
+            iv_special_attack=0,
+            ev_special_attack=0,
+            special_defense=10,
+            iv_special_defense=0,
+            ev_special_defense=0,
+            formula='test',
+            trainer_id=uuid4(),
+            pokemon_id=uuid4(),
+            captured_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            deleted_at=None,
+            moves=[],
+            pokemon=SimpleNamespace(
+                id=uuid4(),
+                name='pikachu',
+                order=25,
+                status='COMPLETE',
+                external_image='image',
+                image=None,
+                hp=35,
+                speed=90,
+                height=4,
+                weight=60,
+                attack=55,
+                defense=30,
+                habitat='forest',
+                is_baby=False,
+                shape_url=None,
+                shape_name=None,
+                is_mythical=False,
+                gender_rate=4,
+                is_legendary=False,
+                capture_rate=190,
+                hatch_counter=10,
+                base_happiness=70,
+                special_attack=50,
+                base_experience=112,
+                special_defense=50,
+                evolution_chain=None,
+                evolves_from_species=None,
+                has_gender_differences=False,
+                growth_rate=SimpleNamespace(
+                    id=uuid4(),
+                    name='medium',
+                    url='url',
+                    description='medium growth',
+                    formula='medium',
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=None,
+                    deleted_at=None,
+                ),
+                moves=[],
+                abilities=[],
+                evolutions=[],
+                types=[
+                    SimpleNamespace(
+                        id=uuid4(),
+                        name='electric',
+                        text_color='#000',
+                        background_color='#fff',
+                        url='url',
+                        order=1,
+                        weaknesses=[],
+                        strengths=[],
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=None,
+                        deleted_at=None,
+                    )
+                ],
+                created_at=datetime.now(timezone.utc),
+                updated_at=None,
+                deleted_at=None,
+            ),
+        )
+        repository.find_by.return_value = entry
+
+        result = await service.get_trainer(str(uuid4()), uuid4())
+
+        assert result.pokemon.types[0].weaknesses == []
+        assert result.pokemon.types[0].strengths == []

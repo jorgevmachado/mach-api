@@ -166,7 +166,11 @@ class TestTrainerService:
         pokemon = SimpleNamespace(id=uuid4(), name='pikachu', status=StatusEnum.COMPLETE)
         pokemon_service = AsyncMock()
         pokemon_service.list_sync.return_value = True
-        pokemon_service.repository.list_all.return_value = [pokemon]
+        pokemon_service.get.return_value = pokemon
+        pokemon_service.repository = SimpleNamespace(
+            find_by=AsyncMock(return_value=pokemon),
+            list_all=AsyncMock(return_value=[pokemon]),
+        )
         my_pokemon_service = AsyncMock()
         pokedex_service = AsyncMock()
         user_id = uuid4()
@@ -177,10 +181,11 @@ class TestTrainerService:
             my_pokemon_service=my_pokemon_service,
             pokedex_service=pokedex_service,
         )
+        service._resolve_starter = AsyncMock(return_value=pokemon)
 
         result = await service.initialize(
             user_id,
-            TrainerInitializeSchema(pokeballs=5, capture_rate=45),
+            TrainerInitializeSchema(pokeballs=5, capture_rate=45, pokemon_name='pikachu'),
         )
 
         assert result.pokemon_name == 'pikachu'

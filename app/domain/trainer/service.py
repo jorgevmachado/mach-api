@@ -76,6 +76,9 @@ class TrainerService:
                 return await self._initialize_existing_trainer(existing, data)
 
             starter = await self._resolve_starter(data.pokemon_name)
+            print('# => starter')
+            starter_pokemon = await self.pokemon_service.get(name_or_id=starter.name)
+            print('# => starter_pokemon')
             trainer = await self.trainer_repository.create(
                 {
                     'user_id': user_id,
@@ -92,8 +95,8 @@ class TrainerService:
             trainer.pokedex_status = PokedexStatusEnum.INITIALIZING
 
             try:
-                await self.my_pokemon_service.capture(trainer_id, starter)
-                await self.pokedex_service.initialize_for_trainer(trainer_id, starter.name)
+                await self.my_pokemon_service.capture(trainer_id, starter_pokemon)
+                await self.pokedex_service.initialize_for_trainer(trainer_id, starter_pokemon.name)
                 await self.user_repository.update_status(user_id, StatusEnum.COMPLETE)
                 await self.trainer_repository.update_pokedex_status(
                     trainer_id,
