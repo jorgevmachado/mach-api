@@ -46,14 +46,13 @@ async def get_current_trainer(
     return trainer
 
 
-@router.get('', response_model=CustomLimitOffsetPage[PokedexSchema], status_code=HTTPStatus.OK)
+@router.get('', response_model=CustomLimitOffsetPage[PokedexSchema] | list[PokedexSchema], status_code=HTTPStatus.OK)
 async def list_pokedex(
     trainer: Annotated[Trainer, Depends(get_current_trainer)],
     service: Annotated[PokedexService, Depends(get_pokedex_service)],
     page_filter: Annotated[PokedexFilterPageSchema, Depends()],
 ):
-    filter_page = page_filter.with_updates(page=page_filter.page or 1, limit=page_filter.limit or 12)
-    return await service.list_trainer(trainer.id, filter_page)
+    return await service.list_trainer(trainer.id, page_filter)
 
 
 @router.get('/{entry_id}', response_model=PokedexDetailSchema, status_code=HTTPStatus.OK)

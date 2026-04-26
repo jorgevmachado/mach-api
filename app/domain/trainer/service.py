@@ -2,48 +2,31 @@ from __future__ import annotations
 
 import logging
 import random
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from uuid import UUID
 
-from fastapi import BackgroundTasks
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database.database import engine
 from app.core.exceptions import handle_service_exception
 from app.domain.auth.repository import UserRepository
 from app.domain.my_pokemon.service import MyPokemonService
 from app.domain.pokedex.service import PokedexService
 from app.domain.pokemon.service import PokemonService
 from app.domain.trainer.repository import TrainerRepository
-from app.domain.trainer.schema import InitializeTrainerRequest, InitializeTrainerResponse
+from app.domain.trainer.schema import (
+    TrainerInitializeResultSchema,
+    TrainerInitializeSchema,
+    TrainerMeSchema,
+)
 from app.models.enums import PokedexStatusEnum, StatusEnum
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
+INITIALIZATION_STALE_AFTER = timedelta(minutes=2)
 
 
-async def run_pokedex_initialization_task(
-    trainer_id: UUID,
-    starter_name: str,
-) -> None:
-    from app.domain.pokedex.repository import PokedexRepository
-    from app.domain.pokemon.repository import PokemonRepository
-    from app.domain.trainer.repository import TrainerRepository
-
-    async with AsyncSession(engine, expire_on_commit=False) as session:
-        trainer_repository = TrainerRepository(session)
-        pokedex_service = PokedexService(
-            repository=PokedexRepository(session),
-            pokemon_repository=PokemonRepository(session),
-            trainer_repository=trainer_repository,
-        )
-
-        try:
-            await pokedex_service.initialize_for_trainer(trainer_id, starter_name)
-            await trainer_repository.update_pokedex_status(trainer_id, PokedexStatusEnum.READY)
-        except Exception:
-            await session.rollback()
-            await trainer_repository.update_pokedex_status(trainer_id, PokedexStatusEnum.FAILED)
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class TrainerService:
@@ -85,41 +68,14 @@ class TrainerService:
     async def initialize(
         self,
         user_id: UUID,
-        data: InitializeTrainerRequest,
-        background_tasks: BackgroundTasks | None = None,
-    ) -> InitializeTrainerResponse:
+        data: TrainerInitializeSchema,
+    ) -> TrainerInitializeResultSchema:
         try:
             existing = await self.trainer_repository.get_by_user_id(user_id)
             if existing:
-                starter = next(iter(existing.my_pokemons), None)
-                if existing.pokedex_status in (PokedexStatusEnum.EMPTY, PokedexStatusEnum.FAILED):
-                    await self.trainer_repository.update_pokedex_status(
-                        existing.id,
-                        PokedexStatusEnum.INITIALIZING,
-                    )
-                    if starter is not None:
-                        if background_tasks is not None:
-                            background_tasks.add_task(
-                                run_pokedex_initialization_task,
-                                existing.id,
-                                starter.pokemon.name,
-                            )
-                        else:
-                            await run_pokedex_initialization_task(existing.id, starter.pokemon.name)
-                    existing.pokedex_status = PokedexStatusEnum.INITIALIZING
-
-                return InitializeTrainerResponse(
-                    id=existing.id,
-                    user_id=existing.user_id,
-                    pokeballs=existing.pokeballs,
-                    capture_rate=existing.capture_rate,
-                    pokedex_status=existing.pokedex_status,
-                    pokemon_name=starter.pokemon.name if starter is not None else None,
-                    created_at=existing.created_at,
-                )
+                return await self._initialize_existing_trainer(existing, data)
 
             starter = await self._resolve_starter(data.pokemon_name)
-
             trainer = await self.trainer_repository.create(
                 {
                     'user_id': user_id,
@@ -128,34 +84,39 @@ class TrainerService:
                     'pokedex_status': PokedexStatusEnum.INITIALIZING,
                 }
             )
+            trainer_id = trainer.id
+            trainer_user_id = trainer.user_id
+            trainer_pokeballs = trainer.pokeballs
+            trainer_capture_rate = trainer.capture_rate
+            trainer_created_at = trainer.created_at
             trainer.pokedex_status = PokedexStatusEnum.INITIALIZING
 
-            await self.my_pokemon_service.capture(trainer.id, starter)
-
-            await self.user_repository.update_status(user_id, StatusEnum.COMPLETE)
-
-            if background_tasks is not None:
-                background_tasks.add_task(
-                    run_pokedex_initialization_task,
-                    trainer.id,
-                    starter.name,
-                )
-            else:
-                await self.pokedex_service.initialize_for_trainer(trainer.id, starter.name)
+            try:
+                await self.my_pokemon_service.capture(trainer_id, starter)
+                await self.pokedex_service.initialize_for_trainer(trainer_id, starter.name)
+                await self.user_repository.update_status(user_id, StatusEnum.COMPLETE)
                 await self.trainer_repository.update_pokedex_status(
-                    trainer.id,
+                    trainer_id,
                     PokedexStatusEnum.READY,
                 )
-                trainer.pokedex_status = PokedexStatusEnum.READY
+            except Exception:
+                await self.trainer_repository.update_pokedex_status(
+                    trainer_id,
+                    PokedexStatusEnum.FAILED,
+                )
+                raise
 
-            return InitializeTrainerResponse(
-                id=trainer.id,
-                user_id=trainer.user_id,
-                pokeballs=trainer.pokeballs,
-                capture_rate=trainer.capture_rate,
+            trainer.pokedex_status = PokedexStatusEnum.READY
+
+            return TrainerInitializeResultSchema(
+                id=trainer_id,
+                user_id=trainer_user_id,
+                pokeballs=trainer_pokeballs,
+                capture_rate=trainer_capture_rate,
                 pokedex_status=trainer.pokedex_status,
                 pokemon_name=starter.name,
-                created_at=trainer.created_at,
+                message='Trainer initialized successfully.',
+                created_at=trainer_created_at,
             )
 
         except Exception as exception:
@@ -166,3 +127,114 @@ class TrainerService:
                 operation='initialize',
                 raise_exception=True,
             )
+
+    async def get_me(self, current_user: User) -> TrainerMeSchema:
+        trainer = await self.trainer_repository.get_by_user_id(current_user.id)
+        if trainer is None:
+            return TrainerMeSchema(
+                id=UUID('00000000-0000-0000-0000-000000000000'),
+                user_id=current_user.id,
+                pokeballs=0,
+                capture_rate=0,
+                pokedex_status=PokedexStatusEnum.EMPTY,
+                created_at=current_user.created_at,
+            )
+        return TrainerMeSchema.model_validate(trainer)
+
+    async def _initialize_existing_trainer(
+        self,
+        trainer,
+        data: TrainerInitializeSchema,
+    ) -> TrainerInitializeResultSchema:
+        trainer_id = trainer.id
+        trainer_user_id = trainer.user_id
+        trainer_pokeballs = trainer.pokeballs
+        trainer_capture_rate = trainer.capture_rate
+        trainer_created_at = trainer.created_at
+        starter_entry = next(iter(trainer.my_pokemons), None)
+        starter_name = starter_entry.pokemon.name if starter_entry is not None else None
+
+        if trainer.pokedex_status == PokedexStatusEnum.INITIALIZING:
+            if not self._is_initialization_stale(trainer):
+                return TrainerInitializeResultSchema(
+                    id=trainer_id,
+                    user_id=trainer_user_id,
+                    pokeballs=trainer_pokeballs,
+                    capture_rate=trainer_capture_rate,
+                    pokedex_status=trainer.pokedex_status,
+                    pokemon_name=starter_name,
+                    message='Trainer initialization is already in progress.',
+                    created_at=trainer_created_at,
+                )
+
+            logger.warning(
+                'Detected stale trainer initialization; retrying bootstrap',
+                extra={
+                    'service': 'TrainerService',
+                    'operation': 'initialize',
+                    'trainer_id': str(trainer_id),
+                    'user_id': str(trainer_user_id),
+                },
+            )
+
+        if trainer.pokedex_status in (
+            PokedexStatusEnum.EMPTY,
+            PokedexStatusEnum.FAILED,
+            PokedexStatusEnum.INITIALIZING,
+        ):
+            if trainer.pokedex_status == PokedexStatusEnum.FAILED:
+                return TrainerInitializeResultSchema(
+                    id=trainer_id,
+                    user_id=trainer_user_id,
+                    pokeballs=trainer_pokeballs,
+                    capture_rate=trainer_capture_rate,
+                    pokedex_status=trainer.pokedex_status,
+                    pokemon_name=starter_name,
+                    message='A previous Pokedex initialization failed. Review the error before retrying.',
+                    created_at=trainer_created_at,
+                )
+
+            starter = None
+            if starter_name is None:
+                starter = await self._resolve_starter(data.pokemon_name)
+                await self.my_pokemon_service.capture(trainer_id, starter)
+                starter_name = starter.name
+
+            await self.trainer_repository.update_pokedex_status(
+                trainer_id,
+                PokedexStatusEnum.INITIALIZING,
+            )
+            trainer.pokedex_status = PokedexStatusEnum.INITIALIZING
+
+            try:
+                await self.pokedex_service.initialize_for_trainer(trainer_id, starter_name)
+                await self.user_repository.update_status(trainer_user_id, StatusEnum.COMPLETE)
+                await self.trainer_repository.update_pokedex_status(
+                    trainer_id,
+                    PokedexStatusEnum.READY,
+                )
+                trainer.pokedex_status = PokedexStatusEnum.READY
+            except Exception:
+                await self.trainer_repository.update_pokedex_status(
+                    trainer_id,
+                    PokedexStatusEnum.FAILED,
+                )
+                trainer.pokedex_status = PokedexStatusEnum.FAILED
+                raise
+
+        return TrainerInitializeResultSchema(
+            id=trainer_id,
+            user_id=trainer_user_id,
+            pokeballs=trainer_pokeballs,
+            capture_rate=trainer_capture_rate,
+            pokedex_status=trainer.pokedex_status,
+            pokemon_name=starter_name,
+            message=None,
+            created_at=trainer_created_at,
+        )
+
+    def _is_initialization_stale(self, trainer) -> bool:
+        reference_at = trainer.updated_at or trainer.created_at
+        if reference_at is None:
+            return True
+        return _utcnow() - reference_at >= INITIALIZATION_STALE_AFTER

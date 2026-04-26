@@ -1,12 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
+from app.domain.trainer.schema import TrainerMeSchema
 from app.models.enums import GenderEnum, StatusEnum
-from app.domain.trainer.schema import TrainerMeResponse
 
-class RegisterRequest(BaseModel):
+
+class RegisterSchema(BaseModel):
     name: str
     email: EmailStr
     username: str
@@ -22,7 +23,9 @@ class RegisterRequest(BaseModel):
         return value
 
 
-class RegisterResponse(BaseModel):
+class RegisterResultSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     email: str
@@ -30,26 +33,24 @@ class RegisterResponse(BaseModel):
     status: StatusEnum
     created_at: datetime
 
-    model_config = {'from_attributes': True}
 
-
-class LoginRequest(BaseModel):
+class LoginSchema(BaseModel):
     credential: str
     password: str
 
 
-class LoginResponse(BaseModel):
+class LoginResultSchema(BaseModel):
     access_token: str
     token_type: str = 'bearer'
 
 
-class MeResponse(BaseModel):
+class AuthMeSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     email: str
-    trainer: TrainerMeResponse | None = None
+    trainer: TrainerMeSchema | None = None
     username: str
     status: StatusEnum
     created_at: datetime
-
-    model_config = {'from_attributes': True}

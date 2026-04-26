@@ -67,13 +67,14 @@ class PokedexService(BaseService[PokedexRepository, Pokedex]):
                     continue
 
                 payload = initialize_species_progression(pokemon, discovered=discovered)
-                self.repository.session.add(
-                    Pokedex(
-                        **payload,
-                        trainer_id=trainer_id,
-                        pokemon_id=pokemon.id,
-                    )
+                discovered_at = payload.pop('discovered_at', None)
+                entry = Pokedex(
+                    **payload,
+                    trainer_id=trainer_id,
+                    pokemon_id=pokemon.id,
                 )
+                entry.discovered_at = discovered_at
+                self.repository.session.add(entry)
 
             await self.repository.session.commit()
         except Exception:

@@ -25,6 +25,30 @@ def build_pokedex_service(repository: AsyncMock | None = None) -> tuple[PokedexS
 class TestPokedexService:
     @staticmethod
     @pytest.mark.asyncio
+    async def test_initialize_for_trainer_sets_discovered_at_on_new_discovered_entry():
+        service, repository = build_pokedex_service()
+        pokemon = SimpleNamespace(
+            id=uuid4(),
+            name='pikachu',
+            hp=10,
+            speed=10,
+            attack=10,
+            defense=10,
+            special_attack=10,
+            special_defense=10,
+            growth_rate=SimpleNamespace(formula='fast'),
+        )
+        service.pokemon_repository.list_all.return_value = [pokemon]
+        repository.list_all.return_value = []
+
+        await service.initialize_for_trainer(uuid4(), 'pikachu')
+
+        entry = repository.session.add.call_args.args[0]
+        assert entry.discovered is True
+        assert entry.discovered_at is not None
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_get_trainer_rejects_undiscovered_entry():
         service, repository = build_pokedex_service()
         repository.find_by.return_value = SimpleNamespace(

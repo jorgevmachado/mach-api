@@ -1,8 +1,7 @@
 from http import HTTPStatus
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -20,13 +19,12 @@ from app.domain.pokemon_type.repository import PokemonTypeRepository
 from app.domain.pokemon.service import PokemonService
 from app.domain.trainer.repository import TrainerRepository
 from app.domain.trainer.schema import (
-    InitializeTrainerRequest,
-    InitializeTrainerResponse,
-    TrainerMeResponse,
+    TrainerInitializeResultSchema,
+    TrainerInitializeSchema,
+    TrainerMeSchema,
 )
 from app.domain.trainer.service import TrainerService
 from app.infrastructure.external_api.pokeapi_client import PokeApiClient
-from app.models.enums import PokedexStatusEnum
 from app.models.user import User
 
 router = APIRouter()
@@ -62,30 +60,23 @@ def get_trainer_repository(session: Session) -> TrainerRepository:
     return TrainerRepository(session)
 
 
-@router.post('/initialize', response_model=InitializeTrainerResponse, status_code=HTTPStatus.CREATED)
+@router.post(
+    '/initialize',
+    response_model=TrainerInitializeResultSchema,
+    status_code=HTTPStatus.CREATED,
+)
 async def initialize_trainer(
-    data: InitializeTrainerRequest,
-    background_tasks: BackgroundTasks,
+    data: TrainerInitializeSchema,
     current_user: Annotated[User, Depends(get_current_user)],
     service: Annotated[TrainerService, Depends(get_trainer_service)],
 ):
-    trainer = await service.initialize(current_user.id, data, background_tasks=background_tasks)
+    trainer = await service.initialize(current_user.id, data)
     return trainer
 
 
-@router.get('/me', response_model=TrainerMeResponse, status_code=HTTPStatus.OK)
+@router.get('/me', response_model=TrainerMeSchema, status_code=HTTPStatus.OK)
 async def me_trainer(
     current_user: Annotated[User, Depends(get_current_user)],
-    repository: Annotated[TrainerRepository, Depends(get_trainer_repository)],
+    service: Annotated[TrainerService, Depends(get_trainer_service)],
 ):
-    trainer = await repository.get_by_user_id(current_user.id)
-    if trainer is None:
-        return TrainerMeResponse(
-            id=UUID('00000000-0000-0000-0000-000000000000'),
-            user_id=current_user.id,
-            pokeballs=0,
-            capture_rate=0,
-            pokedex_status=PokedexStatusEnum.EMPTY,
-            created_at=current_user.created_at,
-        )
-    return trainer
+    return await service.get_me(current_user)

@@ -1,22 +1,31 @@
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 
 from fastapi import HTTPException
 
 from app.core.exceptions import handle_service_exception
 from app.core.security import create_access_token, get_password_hash, verify_password
+from app.domain.auth.schema import AuthMeSchema, LoginResultSchema, LoginSchema, RegisterSchema
 from app.domain.auth.repository import UserRepository
-from app.domain.auth.schema import LoginRequest, RegisterRequest
+from app.domain.trainer.repository import TrainerRepository
 from app.models.enums import StatusEnum
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 
 class AuthService:
-    def __init__(self, repository: UserRepository) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        trainer_repository: TrainerRepository,
+    ) -> None:
         self.repository = repository
+        self.trainer_repository = trainer_repository
 
-    async def register(self, data: RegisterRequest) -> User:
+    async def register(self, data: RegisterSchema) -> User:
         try:
             existing_email = await self.repository.get_by_email(data.email)
             if existing_email:
@@ -41,13 +50,13 @@ class AuthService:
         except Exception as exception:
             handle_service_exception(
                 exception,
-                logger=__import__('logging').getLogger(__name__),
+                logger=logger,
                 service='AuthService',
                 operation='register',
                 raise_exception=True,
             )
 
-    async def login(self, data: LoginRequest) -> dict:
+    async def login(self, data: LoginSchema) -> LoginResultSchema:
         try:
             user = await self.repository.get_by_email_or_username(data.credential)
 
@@ -67,13 +76,28 @@ class AuthService:
             await self.repository.update_auth_success(user.id)
             token = create_access_token({'sub': str(user.id)})
 
-            return {'access_token': token, 'token_type': 'bearer'}
+            return LoginResultSchema(access_token=token)
 
         except Exception as exception:
             handle_service_exception(
                 exception,
-                logger=__import__('logging').getLogger(__name__),
+                logger=logger,
                 service='AuthService',
                 operation='login',
                 raise_exception=True,
             )
+
+    async def me(self, current_user: User) -> AuthMeSchema:
+        trainer = None
+        if current_user.trainer is not None:
+            trainer = await self.trainer_repository.get_by_user_id(current_user.id)
+
+        return AuthMeSchema(
+            id=current_user.id,
+            name=current_user.name,
+            email=current_user.email,
+            trainer=trainer,
+            username=current_user.username,
+            status=current_user.status,
+            created_at=current_user.created_at,
+        )
