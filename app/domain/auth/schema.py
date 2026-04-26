@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.models.enums import GenderEnum, StatusEnum
-
+from app.domain.trainer.schema import TrainerMeResponse
 
 class RegisterRequest(BaseModel):
     name: str
@@ -47,6 +47,7 @@ class MeResponse(BaseModel):
     id: UUID
     name: str
     email: str
+    trainer: TrainerMeResponse | None = None
     username: str
     status: StatusEnum
     created_at: datetime

@@ -11,9 +11,11 @@ from jwt import DecodeError, ExpiredSignatureError, decode, encode
 from pwdlib import PasswordHash
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_session
 from app.core.settings import Settings
+from app.models.trainer import Trainer
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='auth/login', refreshUrl='auth/refresh')
@@ -64,7 +66,14 @@ async def get_current_user(
     except (DecodeError, ExpiredSignatureError, ValueError):
         raise credentials_exception
 
-    user = await session.scalar(select(User).where(User.id == user_id))
+    user = await session.scalar(
+        select(User)
+        .options(
+            selectinload(User.trainer).selectinload(Trainer.pokedex_entries),
+            selectinload(User.trainer).selectinload(Trainer.my_pokemons),
+        )
+        .where(User.id == user_id)
+    )
 
     if not user:
         raise credentials_exception

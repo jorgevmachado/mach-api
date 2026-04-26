@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.models.enums import PokedexStatusEnum
+from app.domain.pokedex.schema import PokedexSchema
+from app.domain.my_pokemon.schema import MyPokemonSchema
 
 
 class InitializeTrainerRequest(BaseModel):
@@ -30,6 +32,8 @@ class TrainerMeResponse(BaseModel):
     pokeballs: int
     capture_rate: int
     pokedex_status: PokedexStatusEnum
+    pokedex_entries: list[PokedexSchema] = []
+    my_pokemons: list[MyPokemonSchema] = []
     created_at: datetime
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
