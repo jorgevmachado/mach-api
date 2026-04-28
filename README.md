@@ -1,7 +1,7 @@
-[![GitHub stars](https://img.shields.io/github/stars/jorgevmachado/mach-api?style=for-the-badge)](https://github.com/jorgevmachado/mach-api/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/jorgevmachado/mach-api?style=for-the-badge)](https://github.com/jorgevmachado/mach-api/network)
-[![GitHub issues](https://img.shields.io/github/issues/jorgevmachado/mach-api?style=for-the-badge)](https://github.com/jorgevmachado/mach-api/issues)
-[![GitHub license](https://img.shields.io/github/license/jorgevmachado/mach-api?style=for-the-badge)](./LICENSE)
+[![GitHub stars][githubStar-img]][githubStar-url]
+[![GitHub forks][githubForks-img]][githubForks-url]
+[![GitHub issues][githubIssues-img]][githubIssues-url]
+[![GitHub license][githubLicense-img]][githubLicense-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
 
 <!-- TABLE OF CONTENTS -->
@@ -347,3 +347,11 @@ Use this space to list resources you find helpful and would like to give credit 
 [psycopg-url]: https://www.psycopg.org/psycopg3/docs/
 [tzdata]: https://img.shields.io/badge/tzdata-0A192F?logo=clockify&logoColor=white
 [tzdata-url]: https://pypi.org/project/tzdata/
+[githubStar-url]: https://github.com/jorgevmachado/mach-api/stargazers
+[githubStar-img]: https://img.shields.io/github/stars/jorgevmachado/mach-api?style=for-the-badge
+[githubForks-url]: https://github.com/jorgevmachado/mach-api/network
+[githubForks-img]: https://img.shields.io/github/forks/jorgevmachado/mach-api?style=for-the-badge
+[githubIssues-url]: https://github.com/jorgevmachado/mach-api/issues
+[githubIssues-img]: https://img.shields.io/github/issues/jorgevmachado/mach-api?style=for-the-badge
+[githubLicense-url]: ./LICENSE
+[githubLicense-img]: https://img.shields.io/github/license/jorgevmachado/mach-api?style=for-the-badge
